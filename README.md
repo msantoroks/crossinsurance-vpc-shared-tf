@@ -120,29 +120,130 @@ It creates, in order:
 
 ### CIDR validation & registry
 
-Before any resource is created, the module runs a **CIDR validation** step
-(`data.external` → Python script in `validate` mode):
+Every environment must declare a non-overlapping VPC CIDR and subnet ranges.
+The module enforces this automatically through a two-phase process backed by a
+**central registry file** stored in GCS (`cidr-registry.txt`).
 
-- Checks that every subnet CIDR fits inside `vpc_cidr`.
-- Downloads the central registry from GCS and verifies there are no VPC CIDR overlaps across environments.
+#### Registry file format
 
-After validation passes, a **`null_resource`** runs the Python script in `apply`
-mode:
+The registry is a plain-text file with one allocation per line:
+
+```
+cidr|project_id|environment|resource
+```
+
+Example:
+
+```
+10.0.0.0/16|ks-crossinsurance-proj-test-sh|shared|vpc
+10.0.1.0/24|ks-crossinsurance-proj-test-sh|shared|subnet:subnet-shared-a
+10.20.0.0/16|ks-crossinsurance-proj-test-01|dev|vpc
+10.20.1.0/24|ks-crossinsurance-proj-test-01|dev|subnet:sn-dev-01
+10.30.0.0/16|ks-crossinsurance-proj-test-02|stg|vpc
+10.30.1.0/24|ks-crossinsurance-proj-test-02|stg|subnet:sn-stg-01
+10.40.0.0/16|ks-crossinsurance-proj-test-03|prd|vpc
+10.40.1.0/24|ks-crossinsurance-proj-test-03|prd|subnet:sn-prd-01
+```
+
+The file lives at `gs://<cidr_registry_gcs_bucket>/<cidr_registry_gcs_object>`
+(defaults to `cidr-registry.txt` inside the shared project bucket).
+
+#### Phase 1 — Validation (`data.external`, runs on every plan)
+
+Before any resource is created the module invokes a Python script
+(`cidr_registry_gcs_sync.py validate`) via `data.external`. This step:
+
+1. **Parses `vpc_cidr` and `subnets`** from the Terraform variables.
+2. **Validates subnet geometry** — every subnet CIDR must be a valid IPv4
+   network that fits entirely inside `vpc_cidr`.
+3. **Downloads the current registry** from GCS (or starts empty if the object
+   does not exist yet).
+4. **Simulates a merge** — removes any existing rows for this `peer_env` and
+   appends the new VPC + subnet rows.
+5. **Checks for VPC CIDR overlap** — compares every pair of VPC rows across
+   different environments. If any two VPC ranges overlap, the plan fails
+   immediately with a clear error message:
+
+   ```
+   VPC CIDR overlap: 10.20.0.0/16 (dev) vs 10.20.0.0/16 (stg)
+   ```
+
+If `cidr_registry_gcs_bucket` is `null`, only local geometry checks (step 2)
+are performed and the GCS download is skipped.
+
+#### Phase 2 — GCS sync (`null_resource`, runs on apply / destroy)
+
+After validation passes, a `null_resource` with `local-exec` provisioners
+manages the registry file:
+
+**On `terraform apply`** (or resource replacement):
 
 1. Downloads `cidr-registry.txt` from GCS.
 2. Removes any existing rows for this `peer_env`.
 3. Appends the current VPC + subnet rows.
-4. Uploads the merged file back to GCS.
+4. Re-runs the overlap check on the merged result.
+5. Uploads the updated file back to GCS.
 
-On **`terraform destroy`** (or resource replacement), the destroy provisioner:
+**On `terraform destroy`** (or resource replacement — destroy runs first):
 
 1. Downloads `cidr-registry.txt` from GCS.
 2. Removes all rows belonging to this `peer_env`.
 3. Uploads the cleaned file back to GCS.
 
 The `null_resource` triggers include `peer_env`, `project_id`, `vpc_cidr`,
-`subnets` (SHA-256), bucket, and object — any change replaces the resource
-(destroy old rows, then apply new ones).
+`subnets` (SHA-256), bucket, object, and the script hash — any change replaces
+the resource (destroy old rows first, then apply new ones).
+
+#### Sequence diagram
+
+```
+terraform plan
+  │
+  ├─ data.external "cidr_registry_validation"
+  │    └─ python3 cidr_registry_gcs_sync.py validate
+  │         ├─ validate subnet ⊂ vpc_cidr
+  │         ├─ download gs://bucket/cidr-registry.txt
+  │         ├─ simulate merge (remove old peer_env rows, add new)
+  │         ├─ check VPC overlap across all environments
+  │         └─ return { valid: "true" }   ← plan continues
+  │                                        (or fails with overlap error)
+  │
+terraform apply
+  │
+  ├─ module.project_services  (depends on validation token)
+  │
+  ├─ null_resource.cidr_registry_gcs  (depends on validation)
+  │    └─ provisioner "local-exec" (apply)
+  │         ├─ download gs://bucket/cidr-registry.txt
+  │         ├─ remove old peer_env rows
+  │         ├─ append new VPC + subnet rows
+  │         ├─ verify no overlap
+  │         └─ upload merged file to GCS
+  │
+  ├─ module.vpc
+  └─ module.peering
+
+terraform destroy
+  │
+  └─ null_resource.cidr_registry_gcs
+       └─ provisioner "local-exec" (when = destroy)
+            ├─ download gs://bucket/cidr-registry.txt
+            ├─ remove all rows for this peer_env
+            └─ upload cleaned file to GCS
+```
+
+#### GCS access
+
+The Python script tries to use the `google-cloud-storage` library first (fast,
+native). If not installed, it falls back to `gcloud storage cp` / `gsutil cp`
+on `$PATH`. Install the library with:
+
+```bash
+pip install -r modules/blueprint/scripts/requirements-cidr.txt
+```
+
+If the registry object does not exist yet (first apply on a new bucket), the
+script treats it as an empty file and creates it on upload.
 
 ### Module inputs
 
