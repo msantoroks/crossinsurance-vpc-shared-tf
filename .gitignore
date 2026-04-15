@@ -1,0 +1,55 @@
+# --- Terraform ---
+# Init cache (providers, modules, backend state)
+**/.terraform/
+**.terraform.lock.hcl
+
+# State files (remote backend is authoritative; never commit local state)
+*.tfstate
+*.tfstate.*
+
+# Saved plan binaries
+*.tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (local dev overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Lock file is committed (.terraform.lock.hcl) — do NOT ignore it.
+
+# CLI config
+.terraformrc
+terraform.rc
+
+# --- Credentials & secrets ---
+**/credentials/*.json
+*.pem
+*.key
+*.p12
+.env
+.env.*
+.envrc
+
+# tfvars may contain secrets; only the .example files are committed
+*.tfvars
+!*.tfvars.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- Archives ---
+*.zip
+
+# --- Python ---
+__pycache__/
+*.pyc
+.envrc

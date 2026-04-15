@@ -1,0 +1,25 @@
+# Example: calling the env module from another repository (GitHub).
+#
+# module "workload" {
+#   source = "git::https://github.com/marcelosantoro/crossinsuarance-modules.git//env?ref=main"
+#
+#   providers = {
+#     google        = google
+#     google.shared = google.shared
+#   }
+#
+#   vpc_cidr                         = "10.0.0.0/16"
+#   cidr_registry_gcs_bucket         = "my-bucket-in-shared-project"
+#   cidr_registry_gcs_object         = "cidr-registry.txt"
+#
+#   project_id                       = "..."
+#   vpc_name                         = "..."
+#   subnets                          = [...]
+#   shared_project_id                = "..."
+#   attach_shared_vpc_service_project = false
+#   peer_env                         = "dev"
+#   host_vpc_name                    = "vpc-shared"
+# }
+#
+# Runner: python3 + pip install -r env/scripts/requirements-cidr.txt (PyYAML + google-cloud-storage).
+# Plan/apply reads GCS for validation; apply runs a merge upload for this peer_env only.

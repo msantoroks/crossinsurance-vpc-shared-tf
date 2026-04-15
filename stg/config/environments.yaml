@@ -1,0 +1,16 @@
+# This stack (stg): host VPC + workload stg only. CIDR authority: GCS registry (synced by deploy.sh).
+environments:
+  - name: shared
+    project_id: ks-crossinsurance-proj-test-sh
+    region: us-central1
+    vpc_name: vpc-shared
+
+  - name: stg
+    project_id: ks-crossinsurance-proj-test-02
+    region: us-central1
+    vpc_name: vpc-stg
+    vpc_cidr: 10.30.0.0/16
+    subnets:
+      - name: sn-stg-01
+        region: us-central1
+        cidr: 10.30.1.0/24

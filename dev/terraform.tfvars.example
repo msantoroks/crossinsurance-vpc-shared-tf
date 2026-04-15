@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars in this directory.
+
+manage_shared_vpc_service_attachments = false

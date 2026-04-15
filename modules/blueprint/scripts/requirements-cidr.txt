@@ -1,0 +1,4 @@
+# CIDR registry sync (cidr_registry_gcs_sync.py)
+# Optional: google-cloud-storage speeds up GCS I/O; otherwise gcloud/gsutil is used.
+pyyaml>=6.0
+google-cloud-storage>=2.14.0
