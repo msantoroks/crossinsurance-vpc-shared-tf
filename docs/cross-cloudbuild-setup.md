@@ -60,29 +60,10 @@ Key points:
 
 ---
 
-## 3. Setup script (run **once** per workload project)
+## 3. Setup commands (run **once** per workload project)
 
-The repo ships `scripts/setup-cloudbuild-per-project.sh` which automates
-everything below for one project (or all four). Quick start:
-
-```bash
-# Single project (derives STACK from the suffix automatically)
-./scripts/setup-cloudbuild-per-project.sh ks-crossinsurance-proj-test-01
-
-# All four at once
-./scripts/setup-cloudbuild-per-project.sh --all
-```
-
-The script is idempotent: re-running it on a project that's already set up
-just re-asserts IAM bindings and skips trigger creation if they already exist.
-
-> ⚠️ Before running it for a given project, you must connect the GitHub repo
-> to that project's Cloud Build via the Console (one-time UI step). The script
-> prints the link if the repo isn't connected yet. After connecting, re-run
-> the script.
-
-For reference, the manual equivalent (run in Cloud Shell, change `STACK` and
-`WORKLOAD_PROJECT` for each project):
+Run the block below in Cloud Shell, **changing only `STACK` and `WORKLOAD_PROJECT`**
+for each of the four projects. Everything else is the same across all four.
 
 ```bash
 # ── Variables (edit these two for each project) ────────────────────────────
