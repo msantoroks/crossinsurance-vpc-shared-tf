@@ -26,9 +26,14 @@ resolve_credentials() {
   if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then
     return 0
   fi
+  # Cloud Build (BUILD_ID is auto-injected) or explicit ADC opt-in: use the
+  # build/runtime service account via Application Default Credentials.
+  if [[ -n "${BUILD_ID:-}" || "${USE_ADC:-0}" == "1" ]]; then
+    return 0
+  fi
   local f="${STACK_ROOT}/credentials/${DEPLOY_CREDENTIALS:-local}.json"
   if [[ ! -f "${f}" ]]; then
-    echo "Set GOOGLE_APPLICATION_CREDENTIALS or create ${f}" >&2
+    echo "Set GOOGLE_APPLICATION_CREDENTIALS, run with USE_ADC=1, or create ${f}" >&2
     exit 1
   fi
   export GOOGLE_APPLICATION_CREDENTIALS="${f}"
@@ -67,16 +72,24 @@ if [[ "${ACTION}" == "unlock" ]]; then
 fi
 
 resolve_credentials
-"${SCRIPTS_DIR}/connect-project.sh"
+# connect-project.sh is a local convenience (gcloud config set project + ruby
+# YAML parser). Skip in Cloud Build / ADC mode to avoid pulling extra deps into
+# the terraform builder image.
+if [[ -z "${BUILD_ID:-}" && "${USE_ADC:-0}" != "1" ]]; then
+  "${SCRIPTS_DIR}/connect-project.sh"
+fi
 
 require_tfvars() {
-  if [[ ! -f "${VAR_FILE}" ]]; then
-    echo "Missing ${VAR_FILE} (copy from terraform.tfvars.example)." >&2
-    exit 1
-  fi
   if [[ ! -f "${CONFIG_DIR}/environments.yaml" ]]; then
     echo "Missing ${CONFIG_DIR}/environments.yaml" >&2
     exit 1
+  fi
+  # tfvars is git-ignored. When absent (CI / fresh clone) we run with the
+  # defaults declared in variables.tf.
+  if [[ -f "${VAR_FILE}" ]]; then
+    TF_VARS=( -var-file="${VAR_FILE}" )
+  else
+    TF_VARS=()
   fi
 }
 
@@ -99,7 +112,7 @@ init_tf() {
     -backend-config="prefix=${BACKEND_PREFIX}"
 }
 
-TF_VARS=( -var-file="${VAR_FILE}" )
+TF_VARS=()
 
 case "${ACTION}" in
   init)
@@ -119,12 +132,20 @@ case "${ACTION}" in
   apply)
     require_tfvars
     init_tf
-    terraform_tf apply "${TF_VARS[@]}"
+    AUTO=()
+    if [[ -n "${BUILD_ID:-}" || "${TF_AUTO_APPROVE:-0}" == "1" ]]; then
+      AUTO=(-auto-approve)
+    fi
+    terraform_tf apply "${AUTO[@]}" "${TF_VARS[@]}"
     ;;
   destroy)
     require_tfvars
     init_tf
-    terraform_tf destroy "${TF_VARS[@]}"
+    AUTO=()
+    if [[ -n "${BUILD_ID:-}" || "${TF_AUTO_APPROVE:-0}" == "1" ]]; then
+      AUTO=(-auto-approve)
+    fi
+    terraform_tf destroy "${AUTO[@]}" "${TF_VARS[@]}"
     ;;
   output)
     if [[ -z "${EXTRA}" ]]; then
