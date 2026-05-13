@@ -12,7 +12,7 @@
 
 | # | Action | Scope | Granted by |
 |---|---|---|---|
-| 1 | Provide GCP user accounts for `***REMOVED***` and `marcelo.santoro@kloudstax.com`, granted **`roles/owner`** (or the equivalent set of granular roles described in §2) on the workload projects (`<workload-prod>`, `<workload-stg>`, `<workload-dev>`) and on the Shared VPC host project. | Cross GCP Organization | Org Admin / Project Owner |
+| 1 | Provide a GCP user account for `marcelo.santoro@kloudstax.com`, granted **`roles/owner`** (or the equivalent set of granular roles described in §2) on the workload projects (`<workload-prod>`, `<workload-stg>`, `<workload-dev>`) and on the Shared VPC host project. | Cross GCP Organization | Org Admin / Project Owner |
 | 2 | Decide on the **Terraform execution Service Account** strategy: reuse a single central SA across projects (Option A) or provision one local SA per workload project (Option B). See §4. | Cross GCP | Cross IT team |
 | 3 | If Option A is chosen, set the **Organization Policy** `iam.disableCrossProjectServiceAccountUsage` to `Not enforced` on the workload projects. See §5. | Cross GCP Org / Project | Organization Policy Administrator |
 | 4 | Either install the **Cloud Build GitHub App** on the Terraform repository, or grant **repository Admin** rights to `msantoroks` (or an equivalent Kloudstax user) so we can install the App ourselves. See §3. | Cross GitHub Organization | GitHub Org Admin / Repo Admin |
@@ -45,10 +45,9 @@ access detailed in the following sections.
 
 ### 2.1. Kloudstax users
 
-Please invite the following users to the relevant Cross Insurance
+Please invite the following user to the relevant Cross Insurance
 projects:
 
-- `***REMOVED***`
 - `marcelo.santoro@kloudstax.com`
 
 With **one** of the following privilege levels (in order of preference):
@@ -269,10 +268,9 @@ share the bucket names so we can configure them in `deploy.sh` and in the
 
 To enable the integration, we require the following six items:
 
-1. **Invite** `***REMOVED***` and
-   `marcelo.santoro@kloudstax.com` to the relevant GCP projects with
-   `Owner` for the duration of the setup phase (downgrade to granular
-   roles afterwards — see §2.1).
+1. **Invite** `marcelo.santoro@kloudstax.com` to the relevant GCP projects
+   with `Owner` for the duration of the setup phase (downgrade to
+   granular roles afterwards — see §2.1).
 2. **Decide** between Option A (central cross-project SA) and Option B
    (one local SA per workload project). Option A is preferred provided
    the Org Policy in §5 allows it; Option B otherwise.

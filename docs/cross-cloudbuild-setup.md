@@ -176,11 +176,9 @@ approves needs `roles/cloudbuild.builds.approver` **on the workload project**:
 ```bash
 for STACK in test-01 test-02 test-03 test-04; do
   WORKLOAD_PROJECT="ks-crossinsurance-proj-test-${STACK#test-}"
-  for USER in marcelo.santoro@kloudstax.com ***REMOVED***; do
-    gcloud projects add-iam-policy-binding "${WORKLOAD_PROJECT}" \
-      --member="user:${USER}" \
-      --role="roles/cloudbuild.builds.approver"
-  done
+  gcloud projects add-iam-policy-binding "${WORKLOAD_PROJECT}" \
+    --member="user:marcelo.santoro@kloudstax.com" \
+    --role="roles/cloudbuild.builds.approver"
 done
 ```
 
@@ -190,11 +188,9 @@ to RUN the apply trigger from the UI:
 ```bash
 for STACK in test-01 test-02 test-03 test-04; do
   WORKLOAD_PROJECT="ks-crossinsurance-proj-test-${STACK#test-}"
-  for USER in marcelo.santoro@kloudstax.com ***REMOVED***; do
-    gcloud projects add-iam-policy-binding "${WORKLOAD_PROJECT}" \
-      --member="user:${USER}" \
-      --role="roles/cloudbuild.builds.editor"
-  done
+  gcloud projects add-iam-policy-binding "${WORKLOAD_PROJECT}" \
+    --member="user:marcelo.santoro@kloudstax.com" \
+    --role="roles/cloudbuild.builds.editor"
 done
 ```
 
