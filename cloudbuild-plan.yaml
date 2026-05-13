@@ -1,0 +1,29 @@
+substitutions:
+  _STACK: dev
+
+steps:
+  - id: "tf-fmt-check"
+    name: "hashicorp/terraform:1.14.8"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - "terraform fmt -recursive -check"
+
+  - id: "tf-plan"
+    name: "hashicorp/terraform:1.14.8"
+    entrypoint: "sh"
+    env:
+      - "BUILD_ID=${BUILD_ID}"
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        # The cidr_validation module shells out to python3 + google-cloud-storage.
+        # The hashicorp/terraform image is Alpine-based; install both inline.
+        apk add --no-cache python3 py3-pip jq
+        pip install --break-system-packages --quiet google-cloud-storage
+        cd ${_STACK}
+        ./deploy.sh plan
+
+options:
+  logging: CLOUD_LOGGING_ONLY
