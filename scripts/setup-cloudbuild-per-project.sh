@@ -70,13 +70,29 @@ setup_one() {
   echo "  Setup Cloud Build for ${STACK} (project=${WORKLOAD_PROJECT})"
   echo "================================================================"
 
-  # 1. APIs
-  echo "---> [1/7] Enabling APIs (cloudbuild, iam)"
+  # 1. Self-grant: the user running this script must be able to impersonate
+  # ${TF_SA_EMAIL} to create triggers that use it (Cloud Build checks this
+  # at trigger creation time).
+  local CURRENT_ACCOUNT
+  CURRENT_ACCOUNT="$(gcloud config get-value account 2>/dev/null || true)"
+  if [[ -n "${CURRENT_ACCOUNT}" ]]; then
+    echo "---> [1/8] Granting iam.serviceAccountUser to ${CURRENT_ACCOUNT} on ${TF_SA_EMAIL}"
+    gcloud iam service-accounts add-iam-policy-binding "${TF_SA_EMAIL}" \
+      --project="${SHARED_PROJECT}" \
+      --member="user:${CURRENT_ACCOUNT}" \
+      --role="roles/iam.serviceAccountUser" \
+      --condition=None >/dev/null
+  else
+    echo "---> [1/8] WARNING: could not detect active gcloud account; skipping self-grant" >&2
+  fi
+
+  # 2. APIs
+  echo "---> [2/8] Enabling APIs (cloudbuild, iam)"
   gcloud services enable cloudbuild.googleapis.com iam.googleapis.com \
     --project="${WORKLOAD_PROJECT}"
 
-  # 2. Cloud Build P4SA
-  echo "---> [2/7] Ensuring Cloud Build P4SA exists"
+  # 3. Cloud Build P4SA
+  echo "---> [3/8] Ensuring Cloud Build P4SA exists"
   gcloud beta services identity create \
     --service=cloudbuild.googleapis.com \
     --project="${WORKLOAD_PROJECT}" >/dev/null
@@ -87,8 +103,8 @@ setup_one() {
   local CB_P4SA="service-${WORKLOAD_PROJ_NUM}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
   echo "     Cloud Build P4SA: ${CB_P4SA}"
 
-  # 3. Cross-project SA impersonation (workload CB → shared SA)
-  echo "---> [3/7] Granting cross-project IAM on ${TF_SA_EMAIL}"
+  # 4. Cross-project SA impersonation (workload CB → shared SA)
+  echo "---> [4/8] Granting cross-project IAM on ${TF_SA_EMAIL}"
   gcloud iam service-accounts add-iam-policy-binding "${TF_SA_EMAIL}" \
     --project="${SHARED_PROJECT}" \
     --member="serviceAccount:${CB_P4SA}" \
@@ -101,15 +117,15 @@ setup_one() {
     --role="roles/iam.serviceAccountTokenCreator" \
     --condition=None >/dev/null
 
-  # 4. Logs writer for the runtime SA in this workload project
-  echo "---> [4/7] Granting logging.logWriter to ${TF_SA_EMAIL} on ${WORKLOAD_PROJECT}"
+  # 5. Logs writer for the runtime SA in this workload project
+  echo "---> [5/8] Granting logging.logWriter to ${TF_SA_EMAIL} on ${WORKLOAD_PROJECT}"
   gcloud projects add-iam-policy-binding "${WORKLOAD_PROJECT}" \
     --member="serviceAccount:${TF_SA_EMAIL}" \
     --role="roles/logging.logWriter" \
     --condition=None >/dev/null
 
-  # 5. Bucket access for state + CIDR registry (idempotent)
-  echo "---> [5/7] Granting storage.objectAdmin on shared buckets"
+  # 6. Bucket access for state + CIDR registry (idempotent)
+  echo "---> [6/8] Granting storage.objectAdmin on shared buckets"
   gcloud storage buckets add-iam-policy-binding "gs://${STATE_BUCKET}" \
     --member="serviceAccount:${TF_SA_EMAIL}" \
     --role="roles/storage.objectAdmin" >/dev/null
@@ -118,8 +134,8 @@ setup_one() {
     --member="serviceAccount:${TF_SA_EMAIL}" \
     --role="roles/storage.objectAdmin" >/dev/null
 
-  # 6. Plan trigger (auto on push to main)
-  echo "---> [6/7] Creating PLAN trigger (auto on push to main)"
+  # 7. Plan trigger (auto on push to main)
+  echo "---> [7/8] Creating PLAN trigger (auto on push to main)"
   if gcloud builds triggers describe "cross-infra-${STACK}-plan-main" \
       --project="${WORKLOAD_PROJECT}" --region="${REGION}" >/dev/null 2>&1; then
     echo "     plan trigger already exists, skipping create"
@@ -137,8 +153,8 @@ setup_one() {
       --description="Terraform plan for ${STACK} (auto on push to main)"
   fi
 
-  # 7. Apply trigger (manual + require approval)
-  echo "---> [7/7] Creating APPLY trigger (manual + require approval)"
+  # 8. Apply trigger (manual + require approval)
+  echo "---> [8/8] Creating APPLY trigger (manual + require approval)"
   if gcloud builds triggers describe "cross-infra-${STACK}-apply-main" \
       --project="${WORKLOAD_PROJECT}" --region="${REGION}" >/dev/null 2>&1; then
     echo "     apply trigger already exists, skipping create"
