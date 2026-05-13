@@ -18,10 +18,14 @@ steps:
       - "-c"
       - |
         set -euo pipefail
-        # The cidr_validation module shells out to python3 + google-cloud-storage.
-        # The hashicorp/terraform image is Alpine-based; install both inline.
-        apk add --no-cache python3 py3-pip jq
-        pip install --break-system-packages --quiet google-cloud-storage
+        # The hashicorp/terraform image is Alpine-based and ships only sh/jq.
+        # We need:
+        #   - bash      → deploy.sh has `#!/usr/bin/env bash` shebang
+        #   - python3   → cidr_validation module shells out via data.external
+        #   - jq        → connect-project.sh fallback (and generally useful)
+        #   - google-cloud-storage → cidr_registry_gcs_sync.py prefers the lib
+        apk add --no-cache bash python3 py3-pip jq
+        pip install --break-system-packages --root-user-action=ignore --quiet google-cloud-storage
         cd ${_STACK}
         ./deploy.sh plan
 

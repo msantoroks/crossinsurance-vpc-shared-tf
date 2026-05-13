@@ -31,8 +31,8 @@
 #       - "-c"
 #       - |
 #         set -euo pipefail
-#         apk add --no-cache python3 py3-pip jq
-#         pip install --break-system-packages --quiet google-cloud-storage
+#         apk add --no-cache bash python3 py3-pip jq
+#         pip install --break-system-packages --root-user-action=ignore --quiet google-cloud-storage
 #         cd ${_STACK}
 #         ./deploy.sh apply
 #
