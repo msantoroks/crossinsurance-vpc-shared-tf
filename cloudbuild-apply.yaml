@@ -1,40 +1,33 @@
-# =============================================================================
-# Cloud Build apply config — DISABLED by request.
-#
-# The team agreed to NOT enable a Cloud Build apply trigger for now.
-# Only the plan trigger (cloudbuild-plan.yaml) runs automatically on pushes
-# to main. Apply must still be performed locally by an authorized operator
-# using ./deploy.sh apply.
-#
-# To re-enable later: uncomment the steps below and create the manual
-# `cross-infra-dev-apply-main` trigger documented in README.md (always with
-# --require-approval).
-# =============================================================================
+substitutions:
+  _STACK: dev
 
-# substitutions:
-#   _STACK: dev
-#
-# steps:
-#   - id: "tf-fmt-check"
-#     name: "hashicorp/terraform:1.14.8"
-#     entrypoint: "sh"
-#     args:
-#       - "-c"
-#       - "terraform fmt -recursive -check"
-#
-#   - id: "tf-apply"
-#     name: "hashicorp/terraform:1.14.8"
-#     entrypoint: "sh"
-#     env:
-#       - "BUILD_ID=${BUILD_ID}"
-#     args:
-#       - "-c"
-#       - |
-#         set -euo pipefail
-#         apk add --no-cache bash python3 py3-pip jq
-#         pip install --break-system-packages --root-user-action=ignore --quiet google-cloud-storage
-#         cd ${_STACK}
-#         ./deploy.sh apply
-#
-# options:
-#   logging: CLOUD_LOGGING_ONLY
+steps:
+  - id: "tf-fmt-check"
+    name: "hashicorp/terraform:1.14.8"
+    entrypoint: "sh"
+    args:
+      - "-c"
+      - "terraform fmt -recursive -check"
+
+  - id: "tf-apply"
+    name: "hashicorp/terraform:1.14.8"
+    entrypoint: "sh"
+    env:
+      - "BUILD_ID=${BUILD_ID}"
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        # The hashicorp/terraform image is Alpine-based and ships only sh/jq.
+        # We need:
+        #   - bash      → deploy.sh has `#!/usr/bin/env bash` shebang
+        #   - python3   → cidr_validation module shells out via data.external
+        #   - jq        → connect-project.sh fallback (and generally useful)
+        #   - google-cloud-storage → cidr_registry_gcs_sync.py prefers the lib
+        apk add --no-cache bash python3 py3-pip jq
+        pip install --break-system-packages --root-user-action=ignore --quiet google-cloud-storage
+        cd ${_STACK}
+        ./deploy.sh apply
+
+options:
+  logging: CLOUD_LOGGING_ONLY
