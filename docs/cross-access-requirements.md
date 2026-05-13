@@ -1,177 +1,191 @@
-# Cross Insurance — Acessos necessários para integração Cloud Build
+# Cross Insurance — Access Requirements for the Cloud Build Integration
 
-> Documento para a equipe de TI da **Cross Insurance**. Lista os acessos que
-> precisamos no GCP e no GitHub de vocês para entregar a esteira de
-> Terraform via Cloud Build (plan automático no `main`, apply manual com
-> aprovação) idêntica à que está rodando hoje no nosso ambiente de teste
+> Document prepared for the **Cross Insurance** IT team. It enumerates the
+> GCP and GitHub access we require in order to deploy, in your environment,
+> the Terraform / Cloud Build pipeline (automatic plan on `main`, manual
+> apply with mandatory approval) currently running in our internal sandbox
 > (`ks-crossinsurance-proj-test-01..04`).
 
 ---
 
-## TL;DR — Checklist do que precisamos
+## TL;DR — Summary of required actions
 
-| # | O quê | Onde | Quem concede |
+| # | Action | Scope | Granted by |
 |---|---|---|---|
-| 1 | Conta de usuário GCP para `***REMOVED***` e `marcelo.santoro@kloudstax.com` com **`roles/owner`** (ou conjunto equivalente, ver §2) nos projetos `<workload-prod>`, `<workload-stg>`, `<workload-dev>` e no projeto host (Shared VPC) | Cross GCP Org | Org Admin / Project Owner da Cross |
-| 2 | Decisão sobre a **Service Account de execução** do Terraform: reutilizar a SA central `<sa-terraform-ci-cross>` (cross-project) **ou** criar uma SA local em cada projeto workload (ver §4) | Cross GCP | Equipe Cross |
-| 3 | Caso opção (a) — confirmar/ajustar a **Org Policy** `iam.disableCrossProjectServiceAccountUsage` para `Not enforced` nos projetos workload (ver §5) | Cross GCP Org | Organization Policy Administrator |
-| 4 | **Acesso de admin** ao repositório GitHub `<org-cross>/<repo-terraform>` para `msantoroks` (ou usuário equivalente da Kloudstax) **OU** instalação prévia do **Cloud Build GitHub App** no repo, com permissão concedida (ver §3) | GitHub da Cross | GitHub Org Admin / Repo Admin |
-| 5 | Confirmação dos buckets GCS que vamos usar para **state** do Terraform e **registro central de CIDR** (ver §6) | Cross GCP | Equipe Cross |
+| 1 | Provide GCP user accounts for `***REMOVED***` and `marcelo.santoro@kloudstax.com`, granted **`roles/owner`** (or the equivalent set of granular roles described in §2) on the workload projects (`<workload-prod>`, `<workload-stg>`, `<workload-dev>`) and on the Shared VPC host project. | Cross GCP Organization | Org Admin / Project Owner |
+| 2 | Decide on the **Terraform execution Service Account** strategy: reuse a single central SA across projects (Option A) or provision one local SA per workload project (Option B). See §4. | Cross GCP | Cross IT team |
+| 3 | If Option A is chosen, set the **Organization Policy** `iam.disableCrossProjectServiceAccountUsage` to `Not enforced` on the workload projects. See §5. | Cross GCP Org / Project | Organization Policy Administrator |
+| 4 | Either install the **Cloud Build GitHub App** on the Terraform repository, or grant **repository Admin** rights to `msantoroks` (or an equivalent Kloudstax user) so we can install the App ourselves. See §3. | Cross GitHub Organization | GitHub Org Admin / Repo Admin |
+| 5 | Confirm (or authorize creation of) the GCS buckets that will host the **Terraform remote state** and the **central CIDR registry**. See §6. | Cross GCP | Cross IT team |
 
 ---
 
-## 1. Contexto
+## 1. Context
 
-Estamos integrando, no ambiente da Cross, a mesma esteira que já rodamos
-internamente:
+We are deploying, in your environment, the same Infrastructure-as-Code
+pipeline already running in our internal sandbox:
 
-- **Terraform** mono-repo no GitHub, com 1 stack por workload project.
-- **Cloud Build** rodando o `terraform plan` automaticamente em cada push
-  para a branch `main`, e o `terraform apply` por **invocação manual com
-  aprovação obrigatória** (`require-approval`) por uma segunda pessoa.
-- **State remoto** em GCS (1 bucket único, com prefixo por stack).
-- **Registro central de CIDR** em GCS (arquivo único `cidr-registry.txt`)
-  validado em todo plan/apply para impedir sobreposição de faixas entre
-  projetos.
+- A **Terraform** monorepo hosted on GitHub, with one stack per workload
+  project.
+- **Cloud Build** running `terraform plan` automatically on every push to
+  the `main` branch and `terraform apply` only on **manual invocation
+  with mandatory approval** (`require-approval`) by a second person.
+- **Remote state** stored in a single Google Cloud Storage bucket, with a
+  separate object prefix per stack.
+- A **central CIDR registry** kept in GCS (`cidr-registry.txt`) and
+  validated on every plan and apply, in order to prevent overlapping
+  ranges across projects.
 
-Para entregar isso no ambiente de vocês, precisamos dos acessos abaixo.
+In order to extend this pipeline to your environment, we require the
+access detailed in the following sections.
 
 ---
 
-## 2. Acesso ao GCP da Cross
+## 2. GCP access in the Cross Insurance organization
 
-### 2.1. Usuários Kloudstax
+### 2.1. Kloudstax users
 
-Convidar para a Org / Projetos da Cross:
+Please invite the following users to the relevant Cross Insurance
+projects:
 
 - `***REMOVED***`
 - `marcelo.santoro@kloudstax.com`
 
-Com **um** dos seguintes níveis (em ordem de preferência da Cross):
+With **one** of the following privilege levels (in order of preference):
 
-1. **`roles/owner`** em cada projeto workload (`<workload-prod>`,
-   `<workload-stg>`, `<workload-dev>`) e no projeto host de Shared VPC.
-   - Cobre tudo. Mais simples para integração.
+1. **`roles/owner`** on each workload project (`<workload-prod>`,
+   `<workload-stg>`, `<workload-dev>`) and on the Shared VPC host
+   project.
+   - This covers every operation required during integration and is the
+     fastest path to delivery.
 
-2. **OU** combinação granular abaixo (se Owner for inviável):
+2. **OR** the granular combination listed below, if Owner is not
+   acceptable in your environment:
 
-   | Role | Projeto | Por quê |
+   | Role | Scope | Purpose |
    |---|---|---|
-   | `roles/cloudbuild.builds.editor` | cada workload | criar/editar triggers, rodar builds |
-   | `roles/cloudbuild.connectionAdmin` | cada workload | conectar o repositório GitHub |
-   | `roles/iam.serviceAccountAdmin` | cada workload + host | criar SAs locais (se opção plano B) |
-   | `roles/iam.serviceAccountUser` | na SA do Terraform | poder usar a SA em triggers |
-   | `roles/resourcemanager.projectIamAdmin` | cada workload + host | gravar bindings IAM |
-   | `roles/orgpolicy.policyAdmin` | nível org **ou** projeto | ajustar a org policy do §5 |
-   | `roles/storage.admin` | host | criar/configurar bucket de state e CIDR |
-   | `roles/compute.networkAdmin` | host | confirmar shared VPC e peering |
+   | `roles/cloudbuild.builds.editor` | each workload project | Create and edit triggers; run builds. |
+   | `roles/cloudbuild.connectionAdmin` | each workload project | Connect the GitHub repository to Cloud Build. |
+   | `roles/iam.serviceAccountAdmin` | each workload project + host | Create local Service Accounts (Option B). |
+   | `roles/iam.serviceAccountUser` | on the Terraform Service Account | Use the SA when creating triggers. |
+   | `roles/resourcemanager.projectIamAdmin` | each workload project + host | Manage IAM bindings. |
+   | `roles/orgpolicy.policyAdmin` | organization or project level | Adjust the org policy described in §5. |
+   | `roles/storage.admin` | host project | Create and configure the state and CIDR registry buckets. |
+   | `roles/compute.networkAdmin` | host project | Validate the Shared VPC and configure peering. |
 
-> Por escopo bem definido (sandbox de teste), o `Owner` durante a fase de
-> setup e migração para granular depois é o caminho mais rápido.
+> Recommendation: grant `Owner` during the integration phase and
+> downgrade to the granular set above once the pipeline is operational.
 
-### 2.2. Service Account do Terraform
+### 2.2. Terraform Service Account access
 
-Ver §4 — definimos qual SA será usada e quem concede acesso.
-
----
-
-## 3. Acesso ao repositório GitHub da Cross
-
-A integração entre Cloud Build e o repositório do Terraform exige que o
-**Cloud Build GitHub App** esteja instalado no repositório de vocês com
-permissão de leitura de código e gravação de status checks.
-
-Hoje, ao tentar conectar pelo Cloud Build da Cross, o botão fica como
-**"Request"** (em vez de "Connect"). Isso acontece porque:
-
-1. Quem está fazendo a tentativa (`msantoroks`) **não é admin do
-   repositório** da Cross.
-2. **OU** o GitHub App ainda não está instalado na organização e o
-   instalador requer permissão de Org Owner / Repo Admin.
-
-### O que precisamos
-
-**Opção A — preferida:** vocês instalam o **Cloud Build GitHub App** na
-organização da Cross e dão acesso ao repositório
-`<org-cross>/<repo-terraform>`. Tutorial: https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github
-
-**Opção B:** dar **`Admin`** no repositório a `msantoroks` (apenas
-durante a integração — pode ser revogado depois) para que ele instale o
-GitHub App e conecte os 4 projetos.
-
-Sem **uma** dessas duas, o Cloud Build não consegue receber webhooks de
-push, e portanto a esteira de plan/apply não funciona.
-
-### Quando estiver tudo conectado
-
-Para cada um dos N projetos workload (`prod`, `stg`, `dev`, etc.),
-**precisamos repetir o `Connect repository`** dentro daquele projeto
-específico — a conexão GitHub é por projeto, não por organização.
+See §4. The required permissions depend on which option is selected.
 
 ---
 
-## 4. Service Account de execução do Terraform
+## 3. GitHub repository access
 
-Aqui temos duas estratégias possíveis. **Decisão em conjunto Kloudstax + Cross.**
+The integration between Cloud Build and the Terraform repository requires
+the **Cloud Build GitHub App** to be installed on your repository, with
+permission to read code and write status checks.
 
-### Opção A — Reutilizar a SA central que o Filipe já criou
+When attempting to connect the repository today from the Cross Insurance
+Cloud Build console, the action button is displayed as **"Request"**
+(rather than "Connect"). This is caused by one of two situations:
 
-Vocês já têm hoje uma SA central usada pelos Cloud Builds das contas dos
-projetos do Filipe — algo como
-`<sa-terraform-ci-cross>@<projeto-terraform-cross>.iam.gserviceaccount.com`.
+1. The user attempting the connection (`msantoroks`) is **not a
+   repository administrator** in the Cross GitHub organization.
+2. **OR** the GitHub App is not installed in the organization, and
+   installation requires Org Owner or Repository Admin privileges.
 
-**Vantagem:** uma única identidade audita todas as execuções de Terraform
-em todos os projetos workload. Permissões são concedidas em um único
-lugar.
+### Required action
 
-**Pré-requisito:** essa SA precisa estar **liberada para impersonation
-cross-project**, ou seja, a Org Policy
-`iam.disableCrossProjectServiceAccountUsage` precisa estar
-**`Not enforced`** (ver §5).
+**Option A (preferred).** The Cross IT team installs the **Cloud Build
+GitHub App** in the GitHub organization and grants it access to the
+Terraform repository (`<cross-org>/<terraform-repo>`).
+Reference: https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github
 
-**Permissões mínimas que essa SA precisa receber:**
+**Option B.** Grant **Admin** rights on the repository to `msantoroks`,
+strictly for the duration of the integration. The role can be revoked
+once all triggers are configured.
 
-| Role | Onde | Por quê |
+Without one of these two options the Cloud Build service cannot receive
+push webhooks, and the plan/apply pipeline cannot operate.
+
+### Once the GitHub App is installed
+
+For each of the N workload projects (`prod`, `stg`, `dev`, etc.) the
+**`Connect repository`** action must be repeated inside that specific
+project — repository connections in Cloud Build are scoped per project,
+not per organization.
+
+---
+
+## 4. Terraform execution Service Account
+
+Two strategies are possible. **Decision to be made jointly by Kloudstax
+and Cross Insurance.**
+
+### Option A — Reuse the central Service Account already in place
+
+A central Service Account is already in use in your environment for the
+Cloud Build pipelines that Filipe configured for the existing projects:
+something along the lines of
+`<sa-terraform-ci-cross>@<cross-terraform-project>.iam.gserviceaccount.com`.
+
+**Advantages.** A single identity audits all Terraform executions across
+all workload projects. Permissions are granted in a single location and
+can be reviewed centrally.
+
+**Prerequisite.** The SA must be allowed to be impersonated across
+projects. The Org Policy `iam.disableCrossProjectServiceAccountUsage`
+must therefore be set to **`Not enforced`** on the workload projects.
+See §5.
+
+**Required permissions for this Service Account:**
+
+| Role | Scope | Purpose |
 |---|---|---|
-| `roles/editor` (ou roles granulares de network/compute) | Cada projeto workload | criar VPC, subnets, peering |
-| `roles/logging.logWriter` | Cada projeto workload | Cloud Build com SA custom precisa escrever logs |
-| `roles/compute.networkAdmin` | Projeto host (Shared VPC) | criar peering bidirecional workload ↔ shared |
-| `roles/storage.objectAdmin` | Bucket de state | ler/gravar tfstate |
-| `roles/storage.objectAdmin` | Bucket do CIDR registry | ler/atualizar cidr-registry.txt |
-| `roles/iam.serviceAccountUser` (concedida ao ***REMOVED***/Marcelo na própria SA) | n/a | poder usar a SA ao criar triggers |
+| `roles/editor` (or equivalent granular network/compute roles) | Each workload project | Create VPCs, subnets and peering resources. |
+| `roles/logging.logWriter` | Each workload project | Required for Cloud Build runs that use a custom Service Account. |
+| `roles/compute.networkAdmin` | Host project (Shared VPC) | Configure bidirectional VPC peering between the workload and the host. |
+| `roles/storage.objectAdmin` | State bucket | Read and write `tfstate`. |
+| `roles/storage.objectAdmin` | CIDR registry bucket | Read and update `cidr-registry.txt`. |
+| `roles/iam.serviceAccountUser` (granted to the Kloudstax users on the SA itself) | n/a | Allow the users to attach the SA to the triggers they create. |
 
-E, para que o Cloud Build do projeto workload consiga **invocar** essa SA
-de outro projeto:
+In addition, in order for the Cloud Build service of each workload
+project to **invoke** the central Service Account, the default Cloud
+Build P4SA of that workload project
+(`service-<PROJECT_NUMBER>@gcp-sa-cloudbuild.iam.gserviceaccount.com`)
+must be granted both `roles/iam.serviceAccountUser` and
+`roles/iam.serviceAccountTokenCreator` on the central SA.
 
-- A **service account default do Cloud Build** de cada projeto workload
-  (`service-<PROJECT_NUMBER>@gcp-sa-cloudbuild.iam.gserviceaccount.com`)
-  precisa receber `roles/iam.serviceAccountUser` e
-  `roles/iam.serviceAccountTokenCreator` na SA central.
+### Option B — One local Service Account per workload project (fallback)
 
-### Opção B — SA local em cada projeto workload (fallback)
-
-Se a Org Policy do §5 estiver enforced e não puder ser desabilitada,
-criamos **uma SA por projeto workload**:
+If the Org Policy in §5 is enforced and cannot be relaxed, we provision
+**one Service Account per workload project**, named
 `sa-terraform-ci@<workload-N>.iam.gserviceaccount.com`.
 
-**Vantagem:** evita o problema de cross-project completamente. Funciona
-mesmo com `iam.disableCrossProjectServiceAccountUsage = enforced`.
+**Advantages.** Avoids the cross-project impersonation requirement
+entirely. Operates regardless of the value of
+`iam.disableCrossProjectServiceAccountUsage`.
 
-**Desvantagem:** N SAs para auditar/manter; cada uma precisa ganhar as
-mesmas permissões da Opção A (sem o passo de impersonation cross-project).
+**Disadvantages.** N Service Accounts to maintain and audit. Each one
+must receive the same set of permissions described in Option A, minus the
+cross-project impersonation grants.
 
-> No nosso ambiente de teste interno **acabamos optando pela Opção B**
-> justamente porque a org da Kloudstax tem essa policy enforced. Se a
-> Cross também estiver, a Opção A não roda do dia 0.
+> In our internal test environment we ultimately adopted **Option B**,
+> because the Kloudstax organization enforces this policy. If the same is
+> true for the Cross Insurance organization, Option A will not be
+> available on day one.
 
 ---
 
-## 5. Org Policy: `iam.disableCrossProjectServiceAccountUsage`
+## 5. Organization Policy: `iam.disableCrossProjectServiceAccountUsage`
 
-Se a Cross optar pela **Opção A** (SA central cross-project), essa policy
-precisa estar **`Not enforced`** nos projetos workload.
+If Option A is selected (central cross-project Service Account), this
+policy must be set to **`Not enforced`** on the workload projects.
 
-### Como verificar
+### How to verify the current state
 
 ```bash
 gcloud org-policies describe \
@@ -179,12 +193,14 @@ gcloud org-policies describe \
   --project=<workload-N>
 ```
 
-Se a saída mostrar `enforced: true` ou `inheritedFrom: ...` com
-`enforced`, a policy está bloqueando.
+If the output shows `enforced: true`, or `inheritedFrom: ...` together
+with `enforced`, the policy is currently blocking cross-project
+impersonation.
 
-### Como ajustar (precisa de Organization Policy Administrator)
+### How to disable (requires Organization Policy Administrator)
 
-Em **nível de projeto** (recomendado se a Org não puder ser tocada):
+At **project level** (recommended when the organization-wide policy
+cannot be modified):
 
 ```bash
 gcloud org-policies reset \
@@ -192,7 +208,7 @@ gcloud org-policies reset \
   --project=<workload-N>
 ```
 
-Ou, mais explícito:
+Or, more explicitly:
 
 ```bash
 cat <<EOF > policy.yaml
@@ -204,74 +220,82 @@ EOF
 gcloud org-policies set-policy policy.yaml
 ```
 
-Repetir para cada projeto workload.
+The action must be repeated for each workload project.
 
-### Observação importante
+### Hardening note
 
-Mesmo com a policy `Not enforced`, é **boa prática** restringir quem pode
-impersonar a SA central via `roles/iam.serviceAccountUser` apenas a:
+Even with the policy set to `Not enforced`, we recommend restricting the
+ability to impersonate the central Service Account (via
+`roles/iam.serviceAccountUser`) to:
 
-- Os usuários humanos que vão criar triggers (Kloudstax + responsáveis da
-  Cross).
-- A SA default do Cloud Build de cada projeto workload (que vai *executar*
-  o build).
+- The human users responsible for creating triggers (Kloudstax personnel
+  and Cross Insurance designated owners).
+- The default Cloud Build Service Account of each workload project
+  (which executes the build at runtime).
 
 ---
 
-## 6. Buckets compartilhados (state + CIDR registry)
+## 6. Shared GCS buckets (state and CIDR registry)
 
-A esteira precisa de 2 buckets GCS — vocês podem decidir onde ficam:
+The pipeline depends on two GCS buckets. The Cross Insurance team is free
+to choose where they reside:
 
-| Bucket | Conteúdo | Tamanho esperado |
+| Bucket | Content | Expected size |
 |---|---|---|
-| `<bucket-tfstate>` | tfstate de todos os stacks (1 prefixo por workload) | < 100 MB total |
-| `<bucket-cidr-registry>` | arquivo `cidr-registry.txt` (texto puro) | < 1 KB |
+| `<state-bucket>` | Terraform state for every stack (one prefix per workload) | < 100 MB total |
+| `<cidr-registry-bucket>` | The `cidr-registry.txt` plain-text file | < 1 KB |
 
-Recomendação: criar ambos no projeto **host** (o que tem a Shared VPC), com:
+We recommend creating both in the **host** project (the one that owns
+the Shared VPC), with the following configuration:
 
-- **Versionamento ativado** no `<bucket-tfstate>` (essencial para recuperação).
-- **Uniform bucket-level access**.
-- **Localização**: a mesma região dos workloads (ex: `us-central1`)
-  ou multi-região `us`/`eu`.
+- **Object versioning enabled** on the state bucket (essential for
+  recovery from accidental writes).
+- **Uniform bucket-level access** enabled.
+- **Location** matching the workload region (for example `us-central1`)
+  or the corresponding multi-region (`us` / `eu`).
 
-Os nomes podem seguir um padrão sugerido:
+A naming convention we suggest:
 
-- `<projeto-host>-terraform-state`
-- `<projeto-host>-vpc-cidr-validator`
+- `<host-project>-terraform-state`
+- `<host-project>-vpc-cidr-validator`
 
-Ou os nomes que vocês já usam — basta nos passar para configurarmos no
-`deploy.sh` e nos `cloudbuild-*.yaml`.
+If your organization already maintains its own naming convention, please
+share the bucket names so we can configure them in `deploy.sh` and in the
+`cloudbuild-*.yaml` files.
 
 ---
 
-## 7. Resumo executivo — Pedido para a TI da Cross
+## 7. Executive summary — Request to the Cross Insurance IT team
 
-Para destravar a integração, precisamos:
+To enable the integration, we require the following six items:
 
-1. **Convidar** `***REMOVED***` e `marcelo.santoro@kloudstax.com`
-   nos projetos GCP da Cross com `Owner` durante a fase de setup
-   (downgrade para roles granulares depois — ver §2.1).
-2. **Decidir** entre Opção A (SA central, depende da org policy) e
-   Opção B (SA local por projeto). Recomendamos Opção A se a org policy
-   permitir; Opção B caso contrário.
-3. Se Opção A → **garantir** que `iam.disableCrossProjectServiceAccountUsage`
-   está `Not enforced` nos projetos workload (ver §5).
-4. **Instalar o Cloud Build GitHub App** no repositório de Terraform da
-   Cross **OU** dar `Admin` no repo a `msantoroks` para que ele faça a
-   instalação (ver §3).
-5. **Confirmar os nomes/localização dos buckets** de state e CIDR
-   registry (ver §6) — ou nos autorizar a criá-los.
-6. **Confirmar os IDs dos projetos** workload e do projeto host que serão
-   alvos da esteira (`prod`, `stg`, `dev`, etc.) e os blocos CIDR
-   pretendidos para cada VPC.
+1. **Invite** `***REMOVED***` and
+   `marcelo.santoro@kloudstax.com` to the relevant GCP projects with
+   `Owner` for the duration of the setup phase (downgrade to granular
+   roles afterwards — see §2.1).
+2. **Decide** between Option A (central cross-project SA) and Option B
+   (one local SA per workload project). Option A is preferred provided
+   the Org Policy in §5 allows it; Option B otherwise.
+3. If Option A is chosen, **ensure** that
+   `iam.disableCrossProjectServiceAccountUsage` is `Not enforced` on the
+   workload projects (see §5).
+4. **Install the Cloud Build GitHub App** on the Terraform repository,
+   **or** grant repository Admin to `msantoroks` so that we can perform
+   the installation ourselves (see §3).
+5. **Confirm the names and locations of the GCS buckets** for state and
+   CIDR registry (see §6), or authorize us to create them.
+6. **Confirm the project IDs** of the workload projects and of the
+   Shared VPC host project that the pipeline will target, together with
+   the CIDR blocks intended for each VPC.
 
-Com esses 6 itens em mãos, conseguimos:
+Once these six items are in place, we will be able to:
 
-- Conectar o repositório nos N projetos.
-- Provisionar/reutilizar a SA conforme decidido.
-- Criar os triggers (1 plan + 1 apply por projeto, total 2N triggers).
-- Rodar o primeiro `plan` end-to-end e demonstrar o `apply` com
-  aprovação manual.
+- Connect the repository to all N workload projects.
+- Provision or reuse the Terraform Service Account as agreed.
+- Create the triggers (one plan + one apply per project, totalling 2N
+  triggers).
+- Execute the first end-to-end `plan` and demonstrate a manually
+  approved `apply`.
 
-Estimativa: **meio dia de trabalho** depois que os 6 itens forem
-atendidos.
+Estimated effort once the six items above are delivered: **half a day**
+of work on our side.
