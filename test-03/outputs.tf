@@ -1,10 +1,5 @@
 output "stack" {
-  value = "prod"
-}
-
-output "environment_name" {
-  description = "Name in environments.yaml (prd)."
-  value       = "prd"
+  value = "test-03"
 }
 
 output "project_id" {

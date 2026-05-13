@@ -1,5 +1,5 @@
-# Stack-local config: ./config/, ./terraform.tfvars. Module: ../modules/blueprint.
-# Remote state prefix: terraform-state/workloads/stg
+# Stack-local config: ./config/environments.yaml. Module: ../modules/blueprint.
+# Remote state prefix: terraform-state/workloads/test-04
 
 provider "google" {
   project = local.workload.project_id
@@ -36,7 +36,7 @@ module "workload" {
 
   shared_project_id                 = local.shared.project_id
   attach_shared_vpc_service_project = var.manage_shared_vpc_service_attachments
-  peer_env                          = "stg"
+  peer_env                          = "test-04"
   host_vpc_name                     = local.shared.vpc_name
 
   depends_on = [data.google_compute_network.shared]

@@ -6,5 +6,5 @@ locals {
   }
 
   shared   = local.environments["shared"]
-  workload = local.environments["prd"]
+  workload = local.environments["test-04"]
 }

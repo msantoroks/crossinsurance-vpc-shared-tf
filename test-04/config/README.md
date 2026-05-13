@@ -1,0 +1,2 @@
+- **`environments.yaml`** — host (`shared`) + this stack’s workload only.
+- **CIDR registry** — stored in GCS; `modules/blueprint` merges only this stack’s `peer_env` on apply and removes those lines on destroy (no local `cidr-registry.txt`).

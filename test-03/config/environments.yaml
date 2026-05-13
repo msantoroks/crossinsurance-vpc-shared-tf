@@ -1,16 +1,17 @@
-# This stack (prod): host VPC + workload prd only. CIDR authority: GCS registry (synced by deploy.sh).
+# Stack test-03: host VPC + workload test-03 only.
+# CIDR authority: GCS registry (synced by deploy.sh).
 environments:
   - name: shared
     project_id: ks-crossinsurance-proj-test-sh
     region: us-central1
     vpc_name: vpc-shared
 
-  - name: prd
+  - name: test-03
     project_id: ks-crossinsurance-proj-test-03
     region: us-central1
-    vpc_name: vpc-prd
+    vpc_name: vpc-test-03
     vpc_cidr: 10.40.0.0/16
     subnets:
-      - name: sn-prd-01
+      - name: sn-test-03-01
         region: us-central1
         cidr: 10.40.1.0/24

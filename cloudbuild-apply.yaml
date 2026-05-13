@@ -1,5 +1,18 @@
+# Cloud Build — Terraform APPLY (manual + require approval)
+#
+# One trigger per workload project (test-01..04). Each trigger lives in its
+# own GCP project and overrides _STACK via --substitutions=_STACK=test-XX.
+# All triggers share the same identity: sa-terraform-ci@<shared-project>.
+#
+# Apply triggers MUST be created with --require-approval. They never fire on
+# push: an operator triggers them manually (gcloud builds triggers run …) and
+# a separate approver approves the build inside Cloud Build before terraform
+# apply runs.
+#
+# See docs/cross-cloudbuild-setup.md for the trigger creation script.
+
 substitutions:
-  _STACK: dev
+  _STACK: test-01
 
 steps:
   - id: "tf-fmt-check"

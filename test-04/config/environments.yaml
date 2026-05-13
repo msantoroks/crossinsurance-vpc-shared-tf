@@ -1,0 +1,17 @@
+# Stack test-04: host VPC + workload test-04 only.
+# CIDR authority: GCS registry (synced by deploy.sh).
+environments:
+  - name: shared
+    project_id: ks-crossinsurance-proj-test-sh
+    region: us-central1
+    vpc_name: vpc-shared
+
+  - name: test-04
+    project_id: ks-crossinsurance-proj-test-04
+    region: us-central1
+    vpc_name: vpc-test-04
+    vpc_cidr: 10.50.0.0/16
+    subnets:
+      - name: sn-test-04-01
+        region: us-central1
+        cidr: 10.50.1.0/24

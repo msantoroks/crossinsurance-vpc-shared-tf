@@ -16,11 +16,7 @@ CONFIG_DIR="${STACK_ROOT}/config"
 export TF_STATE_BUCKET="${TF_STATE_BUCKET:-ks-crossinsurance-proj-test-terraform-state}"
 export SKIP_GCLOUD="${SKIP_GCLOUD:-1}"
 
-if [[ "${STACK_NAME}" == "prod" ]] && [[ "${LEGACY_PRD_STATE:-0}" == "1" ]]; then
-  BACKEND_PREFIX="${BACKEND_PREFIX:-terraform-state/workloads/prd}"
-else
-  BACKEND_PREFIX="${BACKEND_PREFIX:-terraform-state/workloads/${STACK_NAME}}"
-fi
+BACKEND_PREFIX="${BACKEND_PREFIX:-terraform-state/workloads/${STACK_NAME}}"
 
 resolve_credentials() {
   if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" && -f "${GOOGLE_APPLICATION_CREDENTIALS}" ]]; then

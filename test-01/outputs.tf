@@ -1,5 +1,5 @@
 output "stack" {
-  value = "stg"
+  value = "test-01"
 }
 
 output "project_id" {

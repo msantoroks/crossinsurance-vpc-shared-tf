@@ -7,31 +7,37 @@ module (`modules/blueprint`).
 ## Repository layout
 
 ```
-├── dev/                          # Development stack
-├── stg/                          # Staging stack
-├── prod/                         # Production stack
+├── test-01/                       # Workload stack (one directory per project)
+├── test-02/
+├── test-03/
+├── test-04/
 │   ├── config/
-│   │   └── environments.yaml     # Shared + workload definitions (project, region, CIDR, subnets)
-│   ├── credentials/              # SA key (local.json) — git-ignored
+│   │   ├── environments.yaml      # Shared + workload definitions (project, region, CIDR, subnets)
+│   │   └── README.md
+│   ├── credentials/               # SA key (local.json) — git-ignored
 │   ├── scripts/
-│   │   ├── connect-project.sh    # Optional: set gcloud project from SA key or YAML
-│   │   └── ensure_state_bucket.sh# Create the remote-state GCS bucket if missing
-│   ├── deploy.sh                 # Wrapper: init → plan / apply / destroy
-│   ├── locals.tf                 # Reads environments.yaml
-│   ├── main.tf                   # Calls module "workload" (blueprint)
+│   │   ├── connect-project.sh     # Optional: set gcloud project from SA key or YAML
+│   │   └── ensure_state_bucket.sh # Create the remote-state GCS bucket if missing
+│   ├── deploy.sh                  # Wrapper: init → plan / apply / destroy
+│   ├── locals.tf                  # Reads environments.yaml
+│   ├── main.tf                    # Calls module "workload" (blueprint)
 │   ├── outputs.tf
 │   ├── variables.tf
-│   ├── versions.tf               # Terraform + provider versions, GCS backend
-│   ├── terraform.tfvars          # Stack variables — git-ignored
-│   └── terraform.tfvars.example  # Template (committed)
+│   ├── versions.tf                # Terraform + provider versions, GCS backend
+│   ├── terraform.tfvars           # Stack variables — git-ignored
+│   └── terraform.tfvars.example   # Template (committed)
+├── cloudbuild-plan.yaml           # CI: terraform plan (auto on push to main)
+├── cloudbuild-apply.yaml          # CI: terraform apply (manual + require approval)
+├── docs/
+│   └── cross-cloudbuild-setup.md  # Step-by-step Cloud Build setup per project
 └── modules/
-    └── blueprint/                # Reusable environment module
-        ├── main.tf               # Orchestrates sub-modules (project_services → vpc → peering)
-        ├── cidr_validation.tf    # data.external: geometry + overlap checks via Python
-        ├── cidr_registry_gcs.tf  # null_resource: apply merges CIDR rows → GCS; destroy removes them
+    └── blueprint/                 # Reusable environment module
+        ├── main.tf                # Orchestrates sub-modules (project_services → vpc → peering)
+        ├── cidr_validation.tf     # data.external: geometry + overlap checks via Python
+        ├── cidr_registry_gcs.tf   # null_resource: apply merges CIDR rows → GCS; destroy removes them
         ├── variables.tf
         ├── outputs.tf
-        ├── terraform.tf          # Required providers (google, external, null)
+        ├── terraform.tf           # Required providers (google, external, null)
         ├── scripts/
         │   ├── cidr_registry_gcs_sync.py   # validate | apply | destroy
         │   └── requirements-cidr.txt
@@ -43,12 +49,13 @@ module (`modules/blueprint`).
 
 ## GCP projects
 
-| Environment | Project ID                        | VPC CIDR       |
-|-------------|-----------------------------------|----------------|
-| shared      | `ks-crossinsurance-proj-test-sh`  | 10.0.0.0/16    |
-| dev         | `ks-crossinsurance-proj-test-01`  | 10.20.0.0/16   |
-| stg         | `ks-crossinsurance-proj-test-02`  | 10.30.0.0/16   |
-| prd         | `ks-crossinsurance-proj-test-03`  | 10.40.0.0/16   |
+| Stack    | Workload project ID                | VPC name      | VPC CIDR        |
+|----------|------------------------------------|---------------|-----------------|
+| shared   | `ks-crossinsurance-proj-test-sh`   | `vpc-shared`  | 10.0.0.0/16     |
+| test-01  | `ks-crossinsurance-proj-test-01`   | `vpc-test-01` | 10.20.0.0/16    |
+| test-02  | `ks-crossinsurance-proj-test-02`   | `vpc-test-02` | 10.30.0.0/16    |
+| test-03  | `ks-crossinsurance-proj-test-03`   | `vpc-test-03` | 10.40.0.0/16    |
+| test-04  | `ks-crossinsurance-proj-test-04`   | `vpc-test-04` | 10.50.0.0/16    |
 
 > CIDRs are defined in each stack's `config/environments.yaml` and validated
 > against the central GCS registry before any resource is created.
@@ -60,33 +67,37 @@ module (`modules/blueprint`).
 - **Google Cloud SDK** (`gcloud`) or `pip install google-cloud-storage`
 - A **service account key** (or Application Default Credentials) with the necessary IAM roles
 
-## Quick start
+## Quick start (local)
 
 ```bash
 # 1. Place your SA key
-cp /path/to/sa-key.json dev/credentials/local.json
+cp /path/to/sa-key.json test-01/credentials/local.json
 
-# 2. Copy the tfvars template
-cp dev/terraform.tfvars.example dev/terraform.tfvars
+# 2. (Optional) Copy the tfvars template
+cp test-01/terraform.tfvars.example test-01/terraform.tfvars
 
 # 3. Plan
-cd dev
+cd test-01
 ./deploy.sh plan
 
 # 4. Apply
 ./deploy.sh apply
 ```
 
-Repeat for `stg/` and `prod/`.
+Repeat for `test-02/`, `test-03/`, `test-04/`.
 
 ## deploy.sh
 
-Each stack has an identical `deploy.sh` that:
+Each stack ships an identical `deploy.sh` that:
 
-1. Resolves credentials (`credentials/local.json` or `$GOOGLE_APPLICATION_CREDENTIALS`).
+1. Resolves credentials (`credentials/local.json`, `$GOOGLE_APPLICATION_CREDENTIALS`,
+   or ADC when `BUILD_ID` / `USE_ADC=1` is set — i.e. inside Cloud Build).
 2. Optionally creates the remote-state GCS bucket (`RUN_ENSURE_BUCKET=1`).
-3. Runs `terraform init -reconfigure` with the correct bucket and prefix.
-4. Executes the requested action (`plan`, `apply`, `destroy`, `validate`, `output`, `unlock`).
+3. Runs `terraform init -reconfigure` with the correct bucket and prefix
+   (`terraform-state/workloads/<stack>`).
+4. Executes the requested action (`plan`, `apply`, `destroy`, `validate`,
+   `output`, `unlock`). In CI (`BUILD_ID` set) `apply`/`destroy` get
+   `-auto-approve` automatically.
 
 ### Environment variables
 
@@ -95,6 +106,8 @@ Each stack has an identical `deploy.sh` that:
 | `TF_STATE_BUCKET` | `ks-crossinsurance-proj-test-terraform-state` | GCS bucket for remote state |
 | `BACKEND_PREFIX` | `terraform-state/workloads/<stack>` | Object prefix inside the bucket |
 | `DEPLOY_CREDENTIALS` | `local` | Filename (without `.json`) inside `credentials/` |
+| `USE_ADC` | `0` | Force Application Default Credentials (skip key file lookup) |
+| `TF_AUTO_APPROVE` | `0` | Force `-auto-approve` on apply/destroy outside CI |
 | `SKIP_GCLOUD` | `1` | Skip `gcloud config set project` |
 | `CLEAN_TF` | `0` | Delete `.terraform/` before init |
 | `RUN_ENSURE_BUCKET` | `0` | Create the state bucket if it does not exist |
@@ -104,10 +117,34 @@ Each stack has an identical `deploy.sh` that:
 Each stack stores its state in the **same GCS bucket** under a separate prefix:
 
 ```
-gs://<TF_STATE_BUCKET>/terraform-state/workloads/dev/
-gs://<TF_STATE_BUCKET>/terraform-state/workloads/stg/
-gs://<TF_STATE_BUCKET>/terraform-state/workloads/prod/
+gs://<TF_STATE_BUCKET>/terraform-state/workloads/test-01/
+gs://<TF_STATE_BUCKET>/terraform-state/workloads/test-02/
+gs://<TF_STATE_BUCKET>/terraform-state/workloads/test-03/
+gs://<TF_STATE_BUCKET>/terraform-state/workloads/test-04/
 ```
+
+## Cloud Build (CI/CD)
+
+Plan and apply are run from Cloud Build. Topology:
+
+- **One trigger pair per workload project**. The `cloudbuild-*.yaml` files
+  live in this repo; each trigger lives in its own GCP project
+  (`ks-crossinsurance-proj-test-01..04`) and overrides `_STACK` via
+  `--substitutions=_STACK=test-XX`.
+- **Single shared identity**: every trigger runs as
+  `sa-terraform-ci@ks-crossinsurance-proj-test-sh.iam.gserviceaccount.com`
+  via cross-project service account impersonation (so terraform always sees
+  the same permissions, regardless of which workload project the trigger
+  fires in).
+- **Plan** triggers fire automatically on push to `main`.
+- **Apply** triggers are manual and use `--require-approval`. An operator
+  runs the trigger, then a separate approver (with
+  `roles/cloudbuild.builds.approver`) approves the build before terraform
+  apply runs.
+
+See [`docs/cross-cloudbuild-setup.md`](docs/cross-cloudbuild-setup.md) for the
+full setup script (API enablement, IAM bindings, trigger creation) for the
+four projects.
 
 ## The blueprint module
 
@@ -137,12 +174,14 @@ Example:
 ```
 10.0.0.0/16|ks-crossinsurance-proj-test-sh|shared|vpc
 10.0.1.0/24|ks-crossinsurance-proj-test-sh|shared|subnet:subnet-shared-a
-10.20.0.0/16|ks-crossinsurance-proj-test-01|dev|vpc
-10.20.1.0/24|ks-crossinsurance-proj-test-01|dev|subnet:sn-dev-01
-10.30.0.0/16|ks-crossinsurance-proj-test-02|stg|vpc
-10.30.1.0/24|ks-crossinsurance-proj-test-02|stg|subnet:sn-stg-01
-10.40.0.0/16|ks-crossinsurance-proj-test-03|prd|vpc
-10.40.1.0/24|ks-crossinsurance-proj-test-03|prd|subnet:sn-prd-01
+10.20.0.0/16|ks-crossinsurance-proj-test-01|test-01|vpc
+10.20.1.0/24|ks-crossinsurance-proj-test-01|test-01|subnet:sn-test-01-01
+10.30.0.0/16|ks-crossinsurance-proj-test-02|test-02|vpc
+10.30.1.0/24|ks-crossinsurance-proj-test-02|test-02|subnet:sn-test-02-01
+10.40.0.0/16|ks-crossinsurance-proj-test-03|test-03|vpc
+10.40.1.0/24|ks-crossinsurance-proj-test-03|test-03|subnet:sn-test-03-01
+10.50.0.0/16|ks-crossinsurance-proj-test-04|test-04|vpc
+10.50.1.0/24|ks-crossinsurance-proj-test-04|test-04|subnet:sn-test-04-01
 ```
 
 The file lives at `gs://<cidr_registry_gcs_bucket>/<cidr_registry_gcs_object>`
@@ -165,7 +204,7 @@ Before any resource is created the module invokes a Python script
    immediately with a clear error message:
 
    ```
-   VPC CIDR overlap: 10.20.0.0/16 (dev) vs 10.20.0.0/16 (stg)
+   VPC CIDR overlap: 10.20.0.0/16 (test-01) vs 10.20.0.0/16 (test-02)
    ```
 
 If `cidr_registry_gcs_bucket` is `null`, only local geometry checks (step 2)
@@ -194,44 +233,6 @@ The `null_resource` triggers include `peer_env`, `project_id`, `vpc_cidr`,
 `subnets` (SHA-256), bucket, object, and the script hash — any change replaces
 the resource (destroy old rows first, then apply new ones).
 
-#### Sequence diagram
-
-```
-terraform plan
-  │
-  ├─ data.external "cidr_registry_validation"
-  │    └─ python3 cidr_registry_gcs_sync.py validate
-  │         ├─ validate subnet ⊂ vpc_cidr
-  │         ├─ download gs://bucket/cidr-registry.txt
-  │         ├─ simulate merge (remove old peer_env rows, add new)
-  │         ├─ check VPC overlap across all environments
-  │         └─ return { valid: "true" }   ← plan continues
-  │                                        (or fails with overlap error)
-  │
-terraform apply
-  │
-  ├─ module.project_services  (depends on validation token)
-  │
-  ├─ null_resource.cidr_registry_gcs  (depends on validation)
-  │    └─ provisioner "local-exec" (apply)
-  │         ├─ download gs://bucket/cidr-registry.txt
-  │         ├─ remove old peer_env rows
-  │         ├─ append new VPC + subnet rows
-  │         ├─ verify no overlap
-  │         └─ upload merged file to GCS
-  │
-  ├─ module.vpc
-  └─ module.peering
-
-terraform destroy
-  │
-  └─ null_resource.cidr_registry_gcs
-       └─ provisioner "local-exec" (when = destroy)
-            ├─ download gs://bucket/cidr-registry.txt
-            ├─ remove all rows for this peer_env
-            └─ upload cleaned file to GCS
-```
-
 #### GCS access
 
 The Python script tries to use the `google-cloud-storage` library first (fast,
@@ -253,7 +254,7 @@ script treats it as an empty file and creates it on upload.
 | `vpc_name` | `string` | yes | VPC name to create |
 | `subnets` | `list(object)` | yes | Subnets (`name`, `region`, `cidr`) |
 | `shared_project_id` | `string` | yes | Shared/host project ID |
-| `peer_env` | `string` | yes | Environment name (`dev`, `stg`, `prd`) |
+| `peer_env` | `string` | yes | Environment name (`test-01`..`test-04`) |
 | `host_vpc_name` | `string` | yes | VPC name in the shared project |
 | `vpc_cidr` | `string` | yes | VPC CIDR block |
 | `attach_shared_vpc_service_project` | `bool` | yes | Attach as Shared VPC service project |
@@ -283,13 +284,13 @@ environments:
     region: us-central1
     vpc_name: vpc-shared
 
-  - name: dev
+  - name: test-01
     project_id: ks-crossinsurance-proj-test-01
     region: us-central1
-    vpc_name: vpc-dev
+    vpc_name: vpc-test-01
     vpc_cidr: 10.20.0.0/16
     subnets:
-      - name: sn-dev-01
+      - name: sn-test-01-01
         region: us-central1
         cidr: 10.20.1.0/24
 ```

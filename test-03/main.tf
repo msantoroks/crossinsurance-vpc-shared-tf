@@ -1,5 +1,5 @@
-# Stack-local config: ./config/, ./terraform.tfvars. Module: ../modules/blueprint.
-# Remote state prefix: terraform-state/workloads/dev
+# Stack-local config: ./config/environments.yaml. Module: ../modules/blueprint.
+# Remote state prefix: terraform-state/workloads/test-03
 
 provider "google" {
   project = local.workload.project_id
@@ -18,7 +18,6 @@ data "google_compute_network" "shared" {
 }
 
 module "workload" {
-  # Alternative: git::https://github.com/marcelosantoro/crossinsuarance-modules.git//env?ref=main
   source = "../modules/blueprint"
 
   providers = {
@@ -37,7 +36,7 @@ module "workload" {
 
   shared_project_id                 = local.shared.project_id
   attach_shared_vpc_service_project = var.manage_shared_vpc_service_attachments
-  peer_env                          = "dev"
+  peer_env                          = "test-03"
   host_vpc_name                     = local.shared.vpc_name
 
   depends_on = [data.google_compute_network.shared]

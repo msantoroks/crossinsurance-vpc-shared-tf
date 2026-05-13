@@ -1,5 +1,13 @@
+# Cloud Build — Terraform PLAN
+#
+# One trigger per workload project (test-01..04). Each trigger lives in its
+# own GCP project and overrides _STACK via --substitutions=_STACK=test-XX.
+# All triggers share the same identity: sa-terraform-ci@<shared-project>.
+#
+# See docs/cross-cloudbuild-setup.md for the trigger creation script.
+
 substitutions:
-  _STACK: dev
+  _STACK: test-01
 
 steps:
   - id: "tf-fmt-check"
