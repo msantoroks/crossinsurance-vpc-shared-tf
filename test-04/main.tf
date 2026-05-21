@@ -27,7 +27,7 @@ module "workload" {
 
   vpc_cidr = local.workload.vpc_cidr
 
-  cidr_registry_gcs_bucket = "ks-crossinsurance-proj-test-sh-vpc-cidr-validator"
+  cidr_registry_gcs_bucket = "terraform-sandbox-ks-test-crossinsurance-vpc-cidr-validator"
   cidr_registry_gcs_object = "cidr-registry.txt"
 
   project_id = local.workload.project_id

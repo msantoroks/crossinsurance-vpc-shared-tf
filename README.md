@@ -49,6 +49,20 @@ module (`modules/blueprint`).
 
 ## GCP projects
 
+The setup uses two project tiers:
+
+**Tooling project** — hosts everything that is shared across stacks (CI
+identity, Terraform state, CIDR registry). Nothing in here ever changes
+when a workload is created or destroyed.
+
+| Purpose | Project ID |
+|---------|------------|
+| Terraform tooling (state + CIDR + CI SA) | `terraform-sandbox-kloudstax` |
+
+**Workload + shared-VPC projects** — one per stack. The `shared` project
+hosts `vpc-shared` (the peering target); the `test-XX` projects host the
+workload VPCs.
+
 | Stack    | Workload project ID                | VPC name      | VPC CIDR        |
 |----------|------------------------------------|---------------|-----------------|
 | shared   | `ks-crossinsurance-proj-test-sh`   | `vpc-shared`  | 10.0.0.0/16     |
@@ -66,6 +80,55 @@ module (`modules/blueprint`).
 - **Python 3** on `$PATH` (used by the CIDR validator / GCS sync script)
 - **Google Cloud SDK** (`gcloud`) or `pip install google-cloud-storage`
 - A **service account key** (or Application Default Credentials) with the necessary IAM roles
+
+## For Cross IT (onboarding)
+
+If you are receiving this repo from Kloudstax to set up the CrossInsurance VPC
+infrastructure on the Cross side, start with
+[`docs/cross-it-onboarding.md`](docs/cross-it-onboarding.md). It is a
+self-contained checklist of what to create, what to grant, and what to
+send back to us.
+
+## One-time tooling bootstrap
+
+Full step-by-step (with troubleshooting for the most common errors) lives
+in [`scripts/bootstrap.md`](scripts/bootstrap.md). The minimal flow is:
+
+Before any stack can run plan/apply you need the tooling project to exist
+with its SA + state bucket + CIDR bucket. Run this once (you must already
+be the owner of `terraform-sandbox-kloudstax`):
+
+```bash
+./scripts/bootstrap-terraform-project.sh
+```
+
+The script is idempotent. To override the defaults:
+
+```bash
+PROJECT=my-tf-project \
+REGION=southamerica-east1 \
+STATE_BUCKET=my-tf-state \
+CIDR_BUCKET=my-cidr-registry \
+./scripts/bootstrap-terraform-project.sh
+```
+
+After it finishes, run the per-project bootstrap once for each workload
+project (and once for the Shared VPC host project):
+
+```bash
+# Workload projects (test-01..04): APIs, Cloud Build P4SA, impersonation
+# grants, and IAM for the central SA inside the workload.
+./scripts/bootstrap-workload-project.sh ks-crossinsurance-proj-test-01
+./scripts/bootstrap-workload-project.sh ks-crossinsurance-proj-test-02
+./scripts/bootstrap-workload-project.sh ks-crossinsurance-proj-test-03
+./scripts/bootstrap-workload-project.sh ks-crossinsurance-proj-test-04
+
+# Shared VPC host (only needs compute.networkAdmin for the host-side peering):
+./scripts/bootstrap-workload-project.sh ks-crossinsurance-proj-test-sh --shared-host
+```
+
+Both scripts are idempotent — safe to re-run if a project is recreated or
+a binding is accidentally removed.
 
 ## Quick start (local)
 
@@ -103,7 +166,7 @@ Each stack ships an identical `deploy.sh` that:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TF_STATE_BUCKET` | `ks-crossinsurance-proj-test-terraform-state` | GCS bucket for remote state |
+| `TF_STATE_BUCKET` | `terraform-sandbox-kloudstax-crossinsurance-tf-state` | GCS bucket for remote state (lives in the tooling project) |
 | `BACKEND_PREFIX` | `terraform-state/workloads/<stack>` | Object prefix inside the bucket |
 | `DEPLOY_CREDENTIALS` | `local` | Filename (without `.json`) inside `credentials/` |
 | `USE_ADC` | `0` | Force Application Default Credentials (skip key file lookup) |
@@ -132,10 +195,11 @@ Plan and apply are run from Cloud Build. Topology:
   (`ks-crossinsurance-proj-test-01..04`) and overrides `_STACK` via
   `--substitutions=_STACK=test-XX`.
 - **Single shared identity**: every trigger runs as
-  `sa-terraform-ci@ks-crossinsurance-proj-test-sh.iam.gserviceaccount.com`
-  via cross-project service account impersonation (so terraform always sees
-  the same permissions, regardless of which workload project the trigger
-  fires in).
+  `sa-terraform-ci@terraform-sandbox-kloudstax.iam.gserviceaccount.com`
+  via cross-project service account impersonation. The SA lives in the
+  tooling project together with the state and CIDR buckets, so terraform
+  always sees the same permissions, regardless of which workload project
+  the trigger fires in.
 - **Plan** triggers fire automatically on push to `main`.
 - **Apply** triggers are manual and use `--require-approval`. An operator
   runs the trigger, then a separate approver (with
