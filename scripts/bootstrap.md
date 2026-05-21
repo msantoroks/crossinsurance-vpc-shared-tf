@@ -43,7 +43,7 @@ Provisions the central Terraform identity and storage in
 - APIs: `storage`, `iam`, `iamcredentials`, `serviceusage`,
   `cloudresourcemanager`, `logging`.
 - Service Account `sa-terraform-ci@terraform-sandbox-kloudstax.iam.gserviceaccount.com`.
-- GCS bucket `terraform-sandbox-kloudstax-crossinsurance-tf-state`
+- GCS bucket `ks-test-crossinsurance-proj-terraform-state`
   (versioned, UBLA, public-access-prevented).
 - GCS bucket `terraform-sandbox-ks-test-crossinsurance-vpc-cidr-validator`
   (same hardening).

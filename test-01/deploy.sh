@@ -13,7 +13,7 @@ SCRIPTS_DIR="${STACK_ROOT}/scripts"
 VAR_FILE="${STACK_ROOT}/terraform.tfvars"
 CONFIG_DIR="${STACK_ROOT}/config"
 
-export TF_STATE_BUCKET="${TF_STATE_BUCKET:-terraform-sandbox-kloudstax-crossinsurance-tf-state}"
+export TF_STATE_BUCKET="${TF_STATE_BUCKET:-ks-test-crossinsurance-proj-terraform-state}"
 export SKIP_GCLOUD="${SKIP_GCLOUD:-1}"
 
 BACKEND_PREFIX="${BACKEND_PREFIX:-terraform-state/workloads/${STACK_NAME}}"

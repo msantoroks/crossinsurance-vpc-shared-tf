@@ -89,7 +89,7 @@ Key points:
 | Shared VPC host | `ks-crossinsurance-proj-test-sh` (`vpc-shared`) |
 | Workload projects | `ks-crossinsurance-proj-test-01..04` |
 | Terraform CI SA | `sa-terraform-ci@terraform-sandbox-kloudstax.iam.gserviceaccount.com` |
-| State bucket | `gs://terraform-sandbox-kloudstax-crossinsurance-tf-state` |
+| State bucket | `gs://ks-test-crossinsurance-proj-terraform-state` |
 | CIDR registry bucket | `gs://terraform-sandbox-ks-test-crossinsurance-vpc-cidr-validator` |
 | GitHub repo | `msantoroks/crossinsurance-vpc-shared-tf` |
 
@@ -132,7 +132,7 @@ TOOLING_PROJECT="terraform-sandbox-kloudstax"
 SHARED_PROJECT="ks-crossinsurance-proj-test-sh"
 TF_SA_EMAIL="sa-terraform-ci@${TOOLING_PROJECT}.iam.gserviceaccount.com"
 TF_SA_FQN="projects/${TOOLING_PROJECT}/serviceAccounts/${TF_SA_EMAIL}"
-STATE_BUCKET="terraform-sandbox-kloudstax-crossinsurance-tf-state"
+STATE_BUCKET="ks-test-crossinsurance-proj-terraform-state"
 CIDR_BUCKET="terraform-sandbox-ks-test-crossinsurance-vpc-cidr-validator"
 REPO_OWNER="msantoroks"
 REPO_NAME="crossinsurance-vpc-shared-tf"

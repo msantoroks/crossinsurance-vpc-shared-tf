@@ -34,7 +34,7 @@ REGION="${REGION:-us-central1}"
 SA_NAME="${SA_NAME:-sa-terraform-ci}"
 SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
 
-STATE_BUCKET="${STATE_BUCKET:-terraform-sandbox-kloudstax-crossinsurance-tf-state}"
+STATE_BUCKET="${STATE_BUCKET:-ks-test-crossinsurance-proj-terraform-state}"
 CIDR_BUCKET="${CIDR_BUCKET:-terraform-sandbox-ks-test-crossinsurance-vpc-cidr-validator}"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }

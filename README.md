@@ -166,7 +166,7 @@ Each stack ships an identical `deploy.sh` that:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TF_STATE_BUCKET` | `terraform-sandbox-kloudstax-crossinsurance-tf-state` | GCS bucket for remote state (lives in the tooling project) |
+| `TF_STATE_BUCKET` | `ks-test-crossinsurance-proj-terraform-state` | GCS bucket for remote state (lives in the tooling project) |
 | `BACKEND_PREFIX` | `terraform-state/workloads/<stack>` | Object prefix inside the bucket |
 | `DEPLOY_CREDENTIALS` | `local` | Filename (without `.json`) inside `credentials/` |
 | `USE_ADC` | `0` | Force Application Default Credentials (skip key file lookup) |
